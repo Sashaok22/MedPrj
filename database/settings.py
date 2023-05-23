@@ -2,11 +2,11 @@ from pydantic import BaseSettings
 
 
 class Settings(BaseSettings):
-    DATABASE_NAME: str = 'maths_model'
+    DATABASE_NAME: str = 'Med'
     DATABASE_HOST: str = 'localhost'
-    DATABASE_PORT: int = 3306
-    DATABASE_USER: str = 'admin'
-    DATABASE_PASS: str = 'admin'
+    DATABASE_PORT: int = 5432
+    DATABASE_USER: str = 'postgres'
+    DATABASE_PASS: str = '1234'
 
     ALEMBIC_SCRIPT_LOCATION: str = 'database:alembic'
 
