@@ -17,6 +17,9 @@ class Diagnosis(SQLModel, table=True):
     result: str = Field(
         max_length=100,
     )
+    doctor_diagnosis: str = Field(
+        max_length=100,
+    )
     description: str = Field(
         max_length=255,
     )

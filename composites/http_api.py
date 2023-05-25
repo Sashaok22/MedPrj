@@ -4,8 +4,7 @@ from sqlalchemy_utils import database_exists, create_database
 from sqlmodel import SQLModel
 import tkinter as tk
 import database
-from N.net import neiron
-from ui.ui import Authorization, Main
+from ui.ui import Authorization
 
 
 class Settings:

@@ -1,7 +1,7 @@
 from docx.shared import Inches
 from mysql.connector import Binary
 from resizeimage import resizeimage
-from PIL import Image as pil_img, ImageTk
+from PIL import ImageTk, Image as pil_img
 from datetime import datetime
 import tkinter as tk
 import io
@@ -17,6 +17,7 @@ from sqlalchemy import or_, and_, desc
 
 from N.net import neiron
 from database.entities import User, Diagnosis, Patient, ImgData
+from matlab_modules.math_example import Math
 
 
 class Authorization(tk.Frame):
@@ -103,6 +104,7 @@ class EntryWithPlaceholder(tk.Entry):
         if not self.get():
             self.put_placeholder()
 
+
 class Child(tk.Toplevel):
     def __init__(self, root, user, session, app, nei):
         super().__init__(root)
@@ -110,6 +112,7 @@ class Child(tk.Toplevel):
         self.session = session
         self.user = user
         self.nei = nei
+        self.math = Math()
         self.view = app
         self.classes = ['COVID', 'NORMAL', 'PNEUMONIA', 'TUBERCULOSIS']
 
@@ -148,33 +151,33 @@ class Child(tk.Toplevel):
                                    text='Поле полис должно содержать\nтолько цифры',
                                    font=("Verdana", 8), fg='#FF0000')
 
-        self.entry_name = EntryWithPlaceholder(self, 'Иванов')
+        self.entry_name = Entry(self)
         self.entry_name.configure(font=("Verdana", 10))
         self.entry_name.place(x=200, y=80)
 
-        self.entry_sorname = EntryWithPlaceholder(self, 'Иван')
+        self.entry_sorname = Entry(self)
         self.entry_sorname.configure(font=("Verdana", 10))
         self.entry_sorname.place(x=200, y=110)
 
-        self.entry_patronymic = EntryWithPlaceholder(self, 'Иванович')
+        self.entry_patronymic = Entry(self)
         self.entry_patronymic.configure(font=("Verdana", 10))
         self.entry_patronymic.place(x=200, y=140)
 
-        self.entry_data = EntryWithPlaceholder(self, '31-12-2000')
+        self.entry_data = Entry(self)
         self.entry_data.configure(font=("Verdana", 10))
         self.entry_data.place(x=200, y=170)
 
-        self.entry_polis = EntryWithPlaceholder(self, '123456789012')
+        self.entry_polis = Entry(self)
         self.entry_polis.configure(font=("Verdana", 10))
         self.entry_polis.place(x=200, y=200)
+
 
         self.entry_sys_res = Text(self, font=("Verdana", 10), width=39, height=5, wrap=WORD, state="disabled")
         self.entry_sys_res.place(x=50, y=360)
 
-        self.selfcomboExample = ttk.Combobox(self,
-                                             values=['COVID', 'NORMAL', 'PNEUMONIA', 'TUBERCULOSIS'], width=29)
+        self.selfcomboExample = Entry(self)
+        self.selfcomboExample.configure(font=("Verdana", 10), width=39)
         self.selfcomboExample.place(x=50, y=470)
-        self.selfcomboExample.current(1)
 
         self.entry_res = Text(self, font=("Verdana", 10), width=39, height=8, wrap=WORD)
         self.entry_res.place(x=50, y=500)
@@ -204,14 +207,14 @@ class Child(tk.Toplevel):
         diagnosis = self.session.query(Diagnosis).get(self.id)
         diagnosis.description = self.entry_res.get("1.0", END)
         diagnosis.user_id = self.user.id
-        diagnosis.result = self.selfcomboExample.get()
+        diagnosis.doctor_diagnosis = self.selfcomboExample.get()
         self.session.add(diagnosis)
         self.session.commit()
         self.view.view_records()
         # bd.logr("Добавил диагноз")
 
     def openfile(self):
-        self.filename = filedialog.askopenfilename(initialdir="D:\\",
+        self.filename = filedialog.askopenfilename(initialdir="D:\\Test",
                                                    title="Выбор снимка")
         self.ImageFrame.destroy()
         self.ImageFrame = LabelFrame(self, height=555, width=620)
@@ -222,6 +225,11 @@ class Child(tk.Toplevel):
         self.our_label2 = Label(self.ImageFrame, image=self.our_image2)
         self.our_label2.image = self.our_image2
         self.our_label2.pack()
+        self.entry_polis.insert(1,'123456789012')
+        self.entry_name.insert(1,'Иванов')
+        self.entry_data.insert(1,'31-12-2000')
+        self.entry_patronymic.insert(1,'Иванович')
+        self.entry_sorname.insert(1,'Иван')
 
     def test(self):
         self.regex = re.compile('(\D+)')
@@ -258,6 +266,11 @@ class Child(tk.Toplevel):
             res3 = format(round(predication[0][predication2[0]] * 100)) + "%"
             self.entry_sys_res.configure(state="normal")
             self.entry_sys_res.delete(1.0, END)
+            descriprion = self.math.resize(self.filename)
+            self.entry_res.insert(1.0, descriprion[0] + ", " + descriprion[1] + ", " + descriprion[2])
+            self.view.view_records()
+            res = "Диагноз системы: " + descriprion[3] + "\n\nУверенность системы: " + \
+                  descriprion[4] + "%"
             self.entry_sys_res.insert(1.0, res)
             self.entry_sys_res.configure(state="disable")
             fin = open(self.filename, "rb")
@@ -281,12 +294,12 @@ class Child(tk.Toplevel):
                 Patient.polis == self.entry_polis.get()
             ).scalar()
             diagnosis = Diagnosis(
-                result=res2,
-                description=self.entry_res.get("1.0", END),
+                result=descriprion[3],
+                description=descriprion[0] + ", " + descriprion[1] + ", " + descriprion[2],
                 diagnosis_date=datetime.today().strftime('%Y-%m-%d'),
                 user_id=self.user.id,
                 patient_id=self.pat_id,
-                system_confidence=res3
+                system_confidence=descriprion[4]
             )
             self.session.add(diagnosis)
             self.session.commit()
@@ -297,17 +310,18 @@ class Child(tk.Toplevel):
             )
             self.session.add(img)
             self.session.commit()
-            self.view.view_records()
             # bd.logr("Произвёл диагностику")
 
 
 class Show_res(tk.Toplevel):
-    def __init__(self):
+    def __init__(self, root, user, session, app):
         super().__init__(root)
+        self.session = session,
+        self.user = user,
         self.view = app
         self.value = self.view.values[0]
-        self.init_child()
         self.classes = ['COVID', 'NORMAL', 'PNEUMONIA', 'TUBERCULOSIS']
+        self.init_child()
 
     def init_child(self):
         self.title('Тестирование')
@@ -355,11 +369,11 @@ class Show_res(tk.Toplevel):
         self.entry_sys_res = Text(self, font=("Verdana", 10), width=39, height=5, wrap=WORD)
         self.entry_sys_res.place(x=50, y=360)
 
-        self.selfcomboExample = ttk.Combobox(self,
-                                             values=['COVID', 'NORMAL', 'PNEUMONIA', 'TUBERCULOSIS'], width=29)
+        self.selfcomboExample = Entry(self)
+        self.selfcomboExample.configure(font=("Verdana", 10), width=39)
         self.selfcomboExample.place(x=50, y=470)
 
-        self.entry_res = Text(self, font=("Verdana", 10), width=39, height=8, wrap=WORD)
+        self.entry_res = Text(self, font=("Verdana", 10), width=39, height=7, wrap=WORD)
         self.entry_res.place(x=50, y=500)
 
         btn_cancel = tk.Button(self, text='Закрыть окно', command=self.destroy, font=("Verdana", 10),
@@ -376,16 +390,17 @@ class Show_res(tk.Toplevel):
 
         self.ImageFrame = LabelFrame(self, height=555, width=620)
         self.ImageFrame.place(x=400, y=80)
-
         self.show_res()
 
     def save_res(self):
-        dbCursor = connection.cursor()
-        requestString = "UPDATE Test SET res = ?,usr_res=?,res_r=? WHERE id= ? ;"
-        dbCursor.execute(requestString, (self.entry_res.get("1.0", END), user.Surname + " " + user.Name,
-                                         self.selfcomboExample.get(), self.value))
-        connection.commit()
-        app.view_records()
+
+        diagnosis = self.session[0].query(Diagnosis).get(self.value)
+        diagnosis.description = self.entry_res.get("1.0", END)
+        diagnosis.user_id = self.user[0].id
+        diagnosis.result = self.selfcomboExample.get()
+        self.session[0].add(diagnosis)
+        self.session[0].commit()
+        self.view.view_records()
         # bd.logr("Добавил диагноз")
 
     def show_res(self):
@@ -395,36 +410,32 @@ class Show_res(tk.Toplevel):
             'PNEUMONIA': 2,
             'TUBERCULOSIS': 3,
         }
-        dbCursor = connection.cursor()
-        requestString = '''select [name],surname,patronymic,date_of_birth,polis,sys_res,res,[date],res_r,sys_confidence
-         from [Patients] join Test on Patients.pat_id = Test.pat_id where id = ?;'''
-        dbCursor.execute(requestString, (self.value))
-        for row in dbCursor:
-            self.entry_name.insert(0, row[1])
-            self.entry_sorname.insert(0, row[0])
-            self.entry_patronymic.insert(0, row[2])
-            self.entry_data.insert(0, row[3])
-            self.entry_polis.insert(0, row[4])
-            self.entry_sys_res.insert(1.0, "Диагноз системы: " + row[5] + "\n\nУверенность системы: " + row[9])
-            if row[6] != None:
-                self.entry_res.insert(1.0, row[6])
-            if row[8] != None:
-                mult = unit_to_multiplier[row[8]]
-                self.selfcomboExample.current(mult)
-            self.test_id = self.value
-            self.entry_name.configure(state="disabled")
-            self.entry_sorname.configure(state="disabled")
-            self.entry_patronymic.configure(state="disabled")
-            self.entry_data.configure(state="disabled")
-            self.entry_polis.configure(state="disabled")
-            self.entry_sys_res.configure(state="disabled")
+        objs = self.session[0].query(
+            Patient.name, Patient.surname, Patient.patronymic, Patient.date_of_birth, Patient.polis, Diagnosis.result,
+            Diagnosis.description, Diagnosis.diagnosis_date, Diagnosis.doctor_diagnosis, Diagnosis.system_confidence
+        ).join(
+            Diagnosis, Diagnosis.patient_id == Patient.id
+        ).where(Diagnosis.id == self.value).one_or_none()
+        self.entry_name.insert(0, objs[1])
+        self.entry_sorname.insert(0, objs[0])
+        self.entry_patronymic.insert(0, objs[2])
+        self.entry_data.insert(0, objs[3])
+        self.entry_polis.insert(0, objs[4])
+        self.entry_sys_res.insert(1.0, "Диагноз системы: " + objs[5] + "\n\nУверенность системы: " + objs[9]+"%")
+        if objs[6] != None:
+            self.entry_res.insert(1.0, objs[6])
+        if objs[8] != None:
+            self.selfcomboExample.insert(0, objs[8])
+        self.test_id = self.value
+        self.entry_name.configure(state="disabled")
+        self.entry_sorname.configure(state="disabled")
+        self.entry_patronymic.configure(state="disabled")
+        self.entry_data.configure(state="disabled")
+        self.entry_polis.configure(state="disabled")
+        self.entry_sys_res.configure(state="disabled")
 
-        requestString = '''SELECT * FROM IMG_Data where test_id=?'''
-        dbCursor.execute(requestString, (self.test_id))
-
-        for row in dbCursor:
-            self.blob_img = row[1]
-        img = Image.open(io.BytesIO(self.blob_img))
+        self.blob_img = self.session[0].query(ImgData.img).where(ImgData.diagnosis_id == self.test_id).one_or_none()[0]
+        img = pil_img.open(io.BytesIO(self.blob_img))
         self.our_image2 = resizeimage.resize_contain(img, [555, 620])
         self.our_image2 = ImageTk.PhotoImage(self.our_image2)
         self.our_label2 = Label(self.ImageFrame, image=self.our_image2)
@@ -437,35 +448,33 @@ class Show_res(tk.Toplevel):
         mydoc = docx.Document()
         mydoc.add_heading("Результат диагностики:", 0)
 
-        dbCursor = connection.cursor()
-        requestString = '''SELECT * FROM IMG_Data where test_id=?'''
-        dbCursor.execute(requestString, (self.test_id))
-
-        for row in dbCursor:
-            self.blob_img = row[1]
-        img = Image.open(io.BytesIO(self.blob_img))
+        self.blob_img = self.session[0].query(ImgData.img).where(ImgData.diagnosis_id == self.test_id).one_or_none()[0]
+        img = pil_img.open(io.BytesIO(self.blob_img))
         output = io.BytesIO()
         img.save(output, format='JPEG')
         output.seek(0)
-        my_image = mydoc.add_picture(output, width=Inches(5.0))
+        my_image = mydoc.add_picture(output, width=Inches(4.0))
         last_paragraph = mydoc.paragraphs[-1]
         last_paragraph.alignment = 1
-        requestString = '''select [name],surname,patronymic,date_of_birth,polis,sys_res,res,[date],sys_confidence
-                 from [Patients] join Test on Patients.pat_id = Test.pat_id where id = ?;'''
-        dbCursor.execute(requestString, (self.value))
-        for row in dbCursor:
-            t = row[3]
-            l = t.strftime('%d/%m/%Y')
-            mydoc.add_heading("Пациент:", 2)
-            mydoc.add_paragraph(row[1] + " " + row[0] + " " + row[2] + "." + "Дата рождения: " + l)
-            mydoc.add_paragraph("Полис: " + self.entry_polis.get())
-            mydoc.add_heading("Диагноз системы:", 2)
-            mydoc.add_paragraph(row[5])
-            mydoc.add_heading("Уверенность системы:", 2)
-            mydoc.add_paragraph(row[8])
-            mydoc.add_heading("Диагноз врача:", 2)
-            mydoc.add_paragraph(row[6])
-            mydoc.save(self.Sfilename)
+        objs = self.session[0].query(
+            Patient.name, Patient.surname, Patient.patronymic, Patient.date_of_birth, Patient.polis, Diagnosis.result,
+            Diagnosis.description, Diagnosis.diagnosis_date, Diagnosis.doctor_diagnosis, Diagnosis.system_confidence
+        ).join(
+            Diagnosis, Diagnosis.patient_id == Patient.id
+        ).where(Diagnosis.id == self.value).one_or_none()
+        t = objs[3]
+        l = t.strftime('%d/%m/%Y')
+        mydoc.add_heading("Пациент:", 2)
+        mydoc.add_paragraph(objs[1] + " " + objs[0] + " " + objs[2] + "." + "Дата рождения: " + l)
+        mydoc.add_paragraph("Полис: " + self.entry_polis.get())
+        mydoc.add_heading("Диагноз системы:", 2)
+        mydoc.add_paragraph(objs[5])
+        mydoc.add_heading("Уверенность системы:", 2)
+        mydoc.add_paragraph(objs[9]+"%")
+        mydoc.add_heading("Диагноз врача:", 2)
+        mydoc.add_paragraph(objs[8])
+        mydoc.add_paragraph(objs[6])
+        mydoc.save(self.Sfilename)
 
 
 class New_usr(tk.Toplevel):
@@ -670,6 +679,7 @@ class Manage_usr(tk.Toplevel):
         bd.logr("Удалил пользователя")
         self.view_records()
 
+
 class Main(tk.Frame):
     def __init__(self, root, user, session, nei):
         super().__init__(root)
@@ -742,7 +752,7 @@ class Main(tk.Frame):
         self.entry_i.place(x=500, y=63)
 
         self.tree = ttk.Treeview(newbar2, columns=('ID', 'FIO', 'Date_of_birth',
-                                                   'Polis', 'Own1', 'Sys_res', 'Usr_res', 'Res', 'Date'),
+                                                   'Polis', 'Own1', 'Sys_res', 'Res', 'Date'),
                                  height=29, show='headings')
         self.tree.column("ID", width=30, anchor=tk.W)
         self.tree.column("FIO", width=200, anchor=tk.W)
@@ -750,7 +760,6 @@ class Main(tk.Frame):
         self.tree.column("Polis", width=100, anchor=tk.W)
         self.tree.column("Own1", width=160, anchor=tk.W)
         self.tree.column("Sys_res", width=200, anchor=tk.W)
-        self.tree.column("Usr_res", width=180, anchor=tk.W)
         self.tree.column("Res", width=180, anchor=tk.W)
         self.tree.column("Date", width=125, anchor=tk.W)
 
@@ -760,7 +769,6 @@ class Main(tk.Frame):
         self.tree.heading("Polis", text='Полис')
         self.tree.heading("Own1", text='Провёл диагностику')
         self.tree.heading("Sys_res", text='Диагноз системы')
-        self.tree.heading("Usr_res", text='Поставил диагноз')
         self.tree.heading("Res", text='Диагноз врача')
         self.tree.heading("Date", text='Дата проведения')
 
@@ -781,6 +789,16 @@ class Main(tk.Frame):
             self.nei
         )
 
+    def add_res(self, event):
+        selected_item = self.tree.selection()[0]
+        self.values = self.tree.item(selected_item, option="values")
+        Show_res(
+            self.root,
+            self.user,
+            self.session,
+            self,
+        )
+
     def reset(self):
         self.view_records()
         self.filt1.current(0)
@@ -789,33 +807,36 @@ class Main(tk.Frame):
 
     def click(self, event):
 
-        self.entry_i.delete(0, 'end')
         curItem = self.tree.focus()
         self.l = self.tree.item(curItem)
-        self.entry_i.insert(0, self.l['values'][3])
+        if self.l['values']:
+            self.entry_i.delete(0, 'end')
+            self.entry_i.insert(0, self.l['values'][3])
 
     def find_pat(self):
         objs = self.session.query(
-            Patient.id, Patient.name, Patient.surname, Patient.patronymic, Patient.date_of_birth, Patient.polis,
-            Diagnosis.result, Diagnosis.description, Diagnosis.diagnosis_date, User.name, User.surname, User.id
+            Diagnosis.id, Patient.name, Patient.surname, Patient.patronymic, Patient.date_of_birth, Patient.polis,
+            Diagnosis.result, Diagnosis.description, Diagnosis.diagnosis_date, User.name, User.surname,
+            Diagnosis.doctor_diagnosis
         ).join(
             Patient, Patient.id == Diagnosis.patient_id
         ).join(
             User, User.id == Diagnosis.user_id
-        ).where(Patient.polis == self.l['values'][3])
+        ).where(Patient.polis == str(self.l['values'][3]))
         [self.tree.delete(i) for i in self.tree.get_children()]
         for row in objs:
             self.tree.insert('', 'end', values=(
                 row[0], row[2] + " " + row[1] + " " + row[3], row[4], row[5], row[10] + " " + row[9],
-                row[6], row[11], row[7], row[8]))
+                row[6], row[11], row[8]))
 
     def manage(self):
         Manage_usr()
 
     def view_records(self):
         objs = self.session.query(
-            Patient.id, Patient.name, Patient.surname, Patient.patronymic, Patient.date_of_birth, Patient.polis,
-            Diagnosis.result, Diagnosis.description, Diagnosis.diagnosis_date, User.name, User.surname, User.id
+            Diagnosis.id, Patient.name, Patient.surname, Patient.patronymic, Patient.date_of_birth, Patient.polis,
+            Diagnosis.result, Diagnosis.description, Diagnosis.diagnosis_date, User.name, User.surname,
+            Diagnosis.doctor_diagnosis
         ).join(
             Patient, Patient.id == Diagnosis.patient_id
         ).join(User, User.id == Diagnosis.user_id)
@@ -823,12 +844,7 @@ class Main(tk.Frame):
         for row in objs:
             self.tree.insert('', 'end', values=(
                 row[0], row[2] + " " + row[1] + " " + row[3], row[4], row[5], row[10] + " " + row[9],
-                row[6], row[11], row[7], row[8]))
-
-    def add_res(self, event):
-        selected_item = self.tree.selection()[0]
-        self.values = self.tree.item(selected_item, option="values")
-        ch = Show_res()
+                row[6], row[11], row[8]))
 
     def filter(self):
         unit_to_multiplier1 = {
@@ -864,7 +880,7 @@ class Main(tk.Frame):
 
         objs = self.session.query(
             Patient.id, Patient.name, Patient.surname, Patient.patronymic, Patient.date_of_birth, Patient.polis,
-            Diagnosis.result, Diagnosis.description, Diagnosis.diagnosis_date, User.name, User.surname, User.id
+            Diagnosis.result, Diagnosis.description, Diagnosis.diagnosis_date, User.name, User.surname
         ).join(
             Patient, Patient.id == Diagnosis.patient_id
         ).join(
@@ -887,4 +903,4 @@ class Main(tk.Frame):
         for row in objs:
             self.tree.insert('', 'end', values=(
                 row[0], row[2] + " " + row[1] + " " + row[3], row[4], row[5], row[10] + " " + row[9],
-                row[6], row[11], row[7], row[8]))
+                row[6], row[7], row[8]))
